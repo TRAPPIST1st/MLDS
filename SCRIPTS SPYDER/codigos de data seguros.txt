@@ -1,0 +1,113 @@
+*  1-  /// código que mostrara error por valores faltantes
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+file_path = r'C:\Users\fabio\Desktop\datas_bootcamp\DatosSeguros.csv'
+df = pd.read_csv(file_path)
+
+# Codificación de variables categóricas
+label_encoder = LabelEncoder()
+df['sexo'] = label_encoder.fit_transform(df['sexo'])
+df['fumador'] = label_encoder.fit_transform(df['fumador'])
+df['region'] = label_encoder.fit_transform(df['region'])
+
+# Definir variables predictoras y objetivo
+X = df.drop('valor_seguro', axis=1)
+y = df['valor_seguro']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+print(f'Accuracy: {accuracy_score(y_test, y_pred)}')
+print(classification_report(y_test, y_pred))
+
+import joblib
+joblib.dump(model, 'modelo_clasificacion.pkl')
+
+//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//2.código corregido para eliminar las filas con valores faltantes (NaN) antes de entrenar el modelo:
+//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+# Cargar el archivo CSV
+file_path = r'C:\Users\fabio\Desktop\datas_bootcamp\DatosSeguros.csv'
+df = pd.read_csv(file_path)
+
+# Eliminar filas con valores faltantes (NaN)
+df = df.dropna()
+
+# Codificación de variables categóricas
+label_encoder = LabelEncoder()
+df['sexo'] = label_encoder.fit_transform(df['sexo'])
+df['fumador'] = label_encoder.fit_transform(df['fumador'])
+df['region'] = label_encoder.fit_transform(df['region'])
+
+# Definir variables predictoras y objetivo
+X = df.drop('valor_seguro', axis=1)
+y = df['valor_seguro']
+
+# Dividir los datos en conjuntos de entrenamiento y prueba
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Entrenar el modelo de clasificación
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+# Evaluar el modelo
+y_pred = model.predict(X_test)
+print(f'Accuracy: {accuracy_score(y_test, y_pred)}')
+print(classification_report(y_test, y_pred))
+
+//*******************************************************************************************
+3.  código corregido donde la variable valor_seguro se convierte en categorías antes de entrenar el modelo de clasificación:
+//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, KBinsDiscretizer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+# Cargar el archivo CSV
+file_path = r'C:\Users\fabio\Desktop\datas_bootcamp\DatosSeguros.csv'
+df = pd.read_csv(file_path)
+
+# Eliminar filas con valores faltantes (NaN)
+df = df.dropna()
+
+# Codificación de variables categóricas
+label_encoder = LabelEncoder()
+df['sexo'] = label_encoder.fit_transform(df['sexo'])
+df['fumador'] = label_encoder.fit_transform(df['fumador'])
+df['region'] = label_encoder.fit_transform(df['region'])
+
+# Convertir 'valor_seguro' en categorías discretas (bajo, medio, alto)
+discretizer = KBinsDiscretizer(n_bins=3, encode='ordinal', strategy='uniform')
+df['valor_seguro'] = discretizer.fit_transform(df[['valor_seguro']])
+
+# Definir variables predictoras y objetivo
+X = df.drop('valor_seguro', axis=1)
+y = df['valor_seguro']
+
+# Dividir los datos en conjuntos de entrenamiento y prueba
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Entrenar el modelo de clasificación
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+# Evaluar el modelo
+y_pred = model.predict(X_test)
+print(f'Accuracy: {accuracy_score(y_test, y_pred)}')
+print(classification_report(y_test, y_pred))
