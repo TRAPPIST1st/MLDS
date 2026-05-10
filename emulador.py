@@ -103,8 +103,8 @@ class _MSLLHOOKSTRUCT(ctypes.Structure):
 WH_MOUSE_LL  = 14
 WM_MOUSEMOVE = 0x0200
 WM_QUIT      = 0x0012
-HOOK_INIT_TIMEOUT_SECS = 0.8
-SCROLL_RELEASE_DELAY_SECS = 0.12
+HOOK_INIT_TIMEOUT_SECONDS = 0.8
+SCROLL_RELEASE_DELAY_SECONDS = 0.12
 PM_REMOVE    = 0x0001
 if sys.platform == "win32" and hasattr(ctypes, "WINFUNCTYPE"):
     _HOOK_FUNC_TYPE = ctypes.WINFUNCTYPE
@@ -218,6 +218,7 @@ def _build_validated_config(loaded):
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        state["config"] = _build_validated_config({})
         return
     try:
         with open(CONFIG_FILE, encoding="utf-8") as f:
@@ -363,7 +364,7 @@ def _install_mouse_hook():
                 state["_hook_thread_id"] = None
             ready.set()
     threading.Thread(target=_pump, daemon=True, name="hook-pump").start()
-    ready.wait(HOOK_INIT_TIMEOUT_SECS)
+    ready.wait(HOOK_INIT_TIMEOUT_SECONDS)
     with state["lock"]:
         return bool(state["_hook"])
 
@@ -413,7 +414,7 @@ def _on_scroll(x, y, dx, dy):
     fr  = BUTTON_RELEASE.get(btn)
     if fn:
         fn(g)
-        threading.Timer(SCROLL_RELEASE_DELAY_SECS, lambda: fr(g) if fr else None).start()
+        threading.Timer(SCROLL_RELEASE_DELAY_SECONDS, lambda: fr(g) if fr else None).start()
 
 def _char(key):
     try:
