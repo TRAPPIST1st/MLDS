@@ -103,12 +103,14 @@ class _MSLLHOOKSTRUCT(ctypes.Structure):
 WH_MOUSE_LL  = 14
 WM_MOUSEMOVE = 0x0200
 WM_QUIT      = 0x0012
+HOOK_INIT_TIMEOUT_SECS = 0.8
+SCROLL_RELEASE_DELAY_SECS = 0.12
 PM_REMOVE    = 0x0001
 if sys.platform == "win32" and hasattr(ctypes, "WINFUNCTYPE"):
-    _HOOK_FUNC = ctypes.WINFUNCTYPE
+    _HOOK_FUNC_TYPE = ctypes.WINFUNCTYPE
 else:
-    _HOOK_FUNC = ctypes.CFUNCTYPE
-HOOKPROC = _HOOK_FUNC(ctypes.c_long, ctypes.c_int, wt.WPARAM, wt.LPARAM)
+    _HOOK_FUNC_TYPE = ctypes.CFUNCTYPE
+HOOKPROC = _HOOK_FUNC_TYPE(ctypes.c_long, ctypes.c_int, wt.WPARAM, wt.LPARAM)
 
 _NUMPAD_TK_KEYS = {
     "kp_0": "num_0", "kp_insert": "num_0",
@@ -361,7 +363,7 @@ def _install_mouse_hook():
                 state["_hook_thread_id"] = None
             ready.set()
     threading.Thread(target=_pump, daemon=True, name="hook-pump").start()
-    ready.wait(0.8)
+    ready.wait(HOOK_INIT_TIMEOUT_SECS)
     with state["lock"]:
         return bool(state["_hook"])
 
@@ -411,7 +413,7 @@ def _on_scroll(x, y, dx, dy):
     fr  = BUTTON_RELEASE.get(btn)
     if fn:
         fn(g)
-        threading.Timer(0.12, lambda: fr(g) if fr else None).start()
+        threading.Timer(SCROLL_RELEASE_DELAY_SECS, lambda: fr(g) if fr else None).start()
 
 def _char(key):
     try:

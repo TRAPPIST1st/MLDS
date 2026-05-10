@@ -91,7 +91,7 @@ class EmuladorTests(unittest.TestCase):
 
     def test_key_str_to_pynput_supports_numpad_and_special_keys(self):
         prev_deps_ok = emulador.DEPS_OK
-        prev_keyboard = getattr(emulador, "pkeyboard", None)
+        prev_pkeyboard = getattr(emulador, "pkeyboard", None)
         try:
             emulador.DEPS_OK = True
             emulador.pkeyboard = _FakeKeyboard
@@ -101,7 +101,7 @@ class EmuladorTests(unittest.TestCase):
             self.assertIsNone(emulador._key_str_to_pynput("unknown_special"))
         finally:
             emulador.DEPS_OK = prev_deps_ok
-            emulador.pkeyboard = prev_keyboard
+            emulador.pkeyboard = prev_pkeyboard
 
 
 if __name__ == "__main__":
