@@ -72,6 +72,8 @@ state = {
     "_hook":           None,
     "_hook_proc":      None,
     "_hook_thread_id": None,
+    "_use_hook_mouse_move": False,
+    "_last_hook_move_ts": 0.0,
     "_last_x":         None,
     "_last_y":         None,
     "lock":            threading.Lock(),
@@ -105,6 +107,7 @@ WM_MOUSEMOVE = 0x0200
 WM_QUIT      = 0x0012
 HOOK_INIT_TIMEOUT_SECONDS = 0.8
 SCROLL_RELEASE_DELAY_SECONDS = 0.12
+HOOK_FALLBACK_IDLE_SECONDS = 0.05
 PM_REMOVE    = 0x0001
 if sys.platform == "win32" and hasattr(ctypes, "WINFUNCTYPE"):
     _HOOK_FUNC_TYPE = ctypes.WINFUNCTYPE
@@ -281,6 +284,22 @@ _SPECIAL_KEYS = {
     "num_0": 0x60, "num_1": 0x61, "num_2": 0x62, "num_3": 0x63, "num_4": 0x64,
     "num_5": 0x65, "num_6": 0x66, "num_7": 0x67, "num_8": 0x68, "num_9": 0x69,
 }
+_PS5_VISUAL_LAYOUT = {
+    "LB (Hombro Izq)": (150, 70, "L1"),
+    "RB (Hombro Der)": (560, 70, "R1"),
+    "BACK (Opciones)": (300, 85, "CREATE"),
+    "START (Menu)": (410, 85, "OPTIONS"),
+    "LS (Click Izq Joy)": (225, 210, "L3"),
+    "RS (Click Der Joy)": (485, 210, "R3"),
+    "DPAD Arriba": (110, 165, "↑"),
+    "DPAD Abajo": (110, 245, "↓"),
+    "DPAD Izquierda": (70, 205, "←"),
+    "DPAD Derecha": (150, 205, "→"),
+    "Y (Interactuar)": (590, 165, "△"),
+    "X (Recarga/Sprint)": (550, 205, "□"),
+    "B (Agacharse)": (630, 205, "◯"),
+    "A (Saltar)": (590, 245, "✕"),
+}
 def _key_str_to_pynput(s):
     if not DEPS_OK or not s:
         return None
@@ -317,11 +336,7 @@ def _install_mouse_hook():
                     lParam, ctypes.POINTER(_MSLLHOOKSTRUCT)
                 ).contents
                 x, y = int(data.pt.x), int(data.pt.y)
-                with state["lock"]:
-                    if state["_last_x"] is not None and state["_last_y"] is not None:
-                        state["mouse_dx"] += x - state["_last_x"]
-                        state["mouse_dy"] += y - state["_last_y"]
-                    state["_last_x"], state["_last_y"] = x, y
+                _accumulate_mouse_delta(x, y, hook_event=True)
             except Exception:
                 pass
         return ctypes.windll.user32.CallNextHookEx(
@@ -367,6 +382,25 @@ def _install_mouse_hook():
     ready.wait(HOOK_INIT_TIMEOUT_SECONDS)
     with state["lock"]:
         return bool(state["_hook"])
+
+def _accumulate_mouse_delta(x, y, hook_event=False):
+    with state["lock"]:
+        if state["_last_x"] is not None and state["_last_y"] is not None:
+            state["mouse_dx"] += x - state["_last_x"]
+            state["mouse_dy"] += y - state["_last_y"]
+        state["_last_x"], state["_last_y"] = x, y
+        if hook_event:
+            state["_last_hook_move_ts"] = time.monotonic()
+
+def _on_move(x, y):
+    with state["lock"]:
+        if not state["active"] or not state["gamepad"]:
+            return
+        use_hook = state["_use_hook_mouse_move"]
+        last_hook_ts = state["_last_hook_move_ts"]
+    if use_hook and (time.monotonic() - last_hook_ts) < HOOK_FALLBACK_IDLE_SECONDS:
+        return
+    _accumulate_mouse_delta(int(x), int(y), hook_event=False)
 
 def _uninstall_mouse_hook():
     with state["lock"]:
@@ -532,14 +566,16 @@ def start_engine(status_cb):
         "rx_smooth": 0.0, "ry_smooth": 0.0,
         "_last_x": None, "_last_y": None,
         "_hook_thread_id": None,
+        "_last_hook_move_ts": 0.0,
     })
     with state["lock"]:
         state["pressed_keys"].clear()
     ok = _install_mouse_hook()
+    state["_use_hook_mouse_move"] = bool(ok)
     if not ok:
         status_cb("Advertencia: hook de mouse falló (¿permisos?)", "yellow")
     state["_mouse_listener"] = pmouse.Listener(
-        on_click=_on_click, on_scroll=_on_scroll
+        on_move=_on_move, on_click=_on_click, on_scroll=_on_scroll
     )
     state["_mouse_listener"].start()
     state["key_listener"] = pkeyboard.Listener(
@@ -554,6 +590,8 @@ def stop_engine():
     state["active"]  = False
     with state["lock"]:
         state["pressed_keys"].clear()
+        state["_use_hook_mouse_move"] = False
+        state["_last_hook_move_ts"] = 0.0
     _uninstall_mouse_hook()
     reset_gamepad()
     for key in ("_mouse_listener", "key_listener"):
@@ -690,7 +728,7 @@ class App(tk.Tk):
     def _page_keymap(self):
         p = self.pages["keymap"]
         self._header(p, "Mapeo de Teclas",
-                     "Haz clic en un boton y presiona la tecla que quieras asignar")
+                     "Haz clic en un boton del mando PS5 y presiona la tecla que quieras asignar")
         wrap   = tk.Frame(p, bg=C["bg"])
         wrap.pack(fill="both", expand=True, padx=24, pady=8)
         canvas = tk.Canvas(wrap, bg=C["bg"], highlightthickness=0)
@@ -710,6 +748,37 @@ class App(tk.Tk):
     def _build_km_rows(self):
         for w in self._km_inner.winfo_children():
             w.destroy()
+        self._km_vars = {
+            label: tk.StringVar(value=key_s or "(sin asignar)")
+            for label, key_s in state["config"]["keymap"].items()
+        }
+        self._km_widgets = {}
+        self._km_visual_btns = {}
+        self._km_btn_title = {}
+        visual = tk.Frame(self._km_inner, bg=C["bg2"], padx=12, pady=12,
+                          highlightbackground=C["border"], highlightthickness=1)
+        visual.pack(fill="x", pady=(0, 8))
+        tk.Label(visual, text="Mando PS5 (click para asignar tecla)",
+                 font=("Courier", 10, "bold"), fg=C["accent"], bg=C["bg2"]).pack(anchor="w", pady=(0, 8))
+        pad = tk.Canvas(visual, width=700, height=320, bg=C["bg2"], highlightthickness=0)
+        pad.pack(fill="x")
+        pad.create_oval(45, 42, 655, 308, outline=C["border"], width=2, fill=C["bg3"])
+        pad.create_oval(170, 120, 290, 250, outline=C["border"], width=2, fill=C["bg2"])
+        pad.create_oval(420, 120, 540, 250, outline=C["border"], width=2, fill=C["bg2"])
+        pad.create_oval(330, 130, 370, 170, outline=C["border"], width=2, fill=C["bg2"])
+        for label, (x, y, title) in _PS5_VISUAL_LAYOUT.items():
+            key_s = state["config"]["keymap"].get(label, "")
+            key_show = (key_s.upper() if len(key_s) == 1 else key_s) if key_s else "-"
+            txt = f"{title}\n[{key_show}]"
+            btn = tk.Button(pad, text=txt, font=("Courier", 8, "bold"),
+                            fg=C["text"], bg=C["bg3"], activebackground=C["bg3"],
+                            activeforeground=C["accent"], bd=1, relief="solid",
+                            width=10, height=2, cursor="hand2")
+            pad.create_window(x, y, window=btn)
+            var = self._km_vars[label]
+            self._km_visual_btns[label] = btn
+            self._km_btn_title[label] = title
+            btn.configure(command=lambda l=label, w=btn, v=var: self._start_key_capture(w, v, l))
         hdr = tk.Frame(self._km_inner, bg=C["bg3"])
         hdr.pack(fill="x", pady=(0, 2))
         for txt, w in [("Boton del Control", 24), ("Tecla Asignada", 20), ("", 6)]:
@@ -724,7 +793,7 @@ class App(tk.Tk):
             tk.Label(row, text=label, font=("Courier", 10),
                      fg=C["text"], bg=C["bg2"],
                      width=24, anchor="w", padx=10).pack(side="left")
-            var = tk.StringVar(value=key_s or "(sin asignar)")
+            var = self._km_vars[label]
             lbl = tk.Label(row, textvariable=var,
                            font=("Courier", 10, "bold"),
                            fg=C["accent"], bg=C["bg3"],
@@ -733,38 +802,60 @@ class App(tk.Tk):
             lbl.pack(side="left", padx=4)
             self._km_widgets[label] = (var, lbl)
 
-            def _make(lbl_w, var_r, btn_l):
-                def start(e):
-                    lbl_w.configure(fg=C["yellow"],
-                                    text="[ presiona tecla... ]")
-                    self._listening = (lbl_w, var_r, btn_l)
-                    self.bind("<KeyPress>", self._capture_key)
-                lbl_w.bind("<Button-1>", start)
-            _make(lbl, var, label)
+            lbl.bind("<Button-1>", lambda e, l=label, w=lbl, v=var: self._start_key_capture(w, v, l))
 
             self._btn(row, "X",
                       lambda l=label: self._clear_key(l),
                       "dim", small=True).pack(side="left")
 
+    def _start_key_capture(self, widget, var_ref, label):
+        if hasattr(widget, "configure"):
+            if isinstance(widget, tk.Button):
+                title = self._km_btn_title.get(label, label)
+                widget.configure(fg=C["yellow"], text=f"{title}\n[...]")
+            else:
+                widget.configure(fg=C["yellow"], text="[ presiona tecla... ]")
+        self._listening = (widget, var_ref, label)
+        self.bind("<KeyPress>", self._capture_key)
+
+    def _refresh_key_widgets(self, label, key_name):
+        show = key_name if key_name else "(sin asignar)"
+        if label in self._km_vars:
+            self._km_vars[label].set(show)
+        _, row_widget = self._km_widgets.get(label, (None, None))
+        if row_widget is not None and hasattr(row_widget, "configure"):
+            row_widget.configure(text=show)
+        visual_btn = self._km_visual_btns.get(label)
+        if visual_btn is not None and hasattr(visual_btn, "configure"):
+            title = self._km_btn_title.get(label, label)
+            key_show = key_name.upper() if len(key_name) == 1 else (key_name or "-")
+            visual_btn.configure(text=f"{title}\n[{key_show}]")
+
     def _capture_key(self, event):
         if not hasattr(self, "_listening"):
             return
-        lbl_w, var_r, btn_l = self._listening
+        widget, var_r, btn_l = self._listening
         key_name = _normalize_key_name(event.keysym)
         if not _is_valid_keybind_value(key_name):
             key_name = ""
         show = key_name if key_name else "(sin asignar)"
         var_r.set(show)
-        lbl_w.configure(fg=C["accent"], text=show)
+        if isinstance(widget, tk.Button):
+            title = self._km_btn_title.get(btn_l, btn_l)
+            key_show = key_name.upper() if len(key_name) == 1 else (key_name or "-")
+            widget.configure(fg=C["accent"], text=f"{title}\n[{key_show}]")
+        else:
+            widget.configure(fg=C["accent"], text=show)
         state["config"]["keymap"][btn_l] = key_name
+        self._refresh_key_widgets(btn_l, key_name)
         self.unbind("<KeyPress>")
         del self._listening
 
     def _clear_key(self, label):
         if label in self._km_widgets:
-            var, lbl = self._km_widgets[label]
+            var, _ = self._km_widgets[label]
             var.set("(sin asignar)")
-            lbl.configure(text="(sin asignar)")
+            self._refresh_key_widgets(label, "")
             state["config"]["keymap"][label] = ""
 
     def _save_keymap(self):

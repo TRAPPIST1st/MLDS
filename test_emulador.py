@@ -103,6 +103,68 @@ class EmuladorTests(unittest.TestCase):
             emulador.DEPS_OK = prev_deps_ok
             emulador.pkeyboard = prev_pkeyboard
 
+    def test_accumulate_mouse_delta_updates_dx_dy(self):
+        with emulador.state["lock"]:
+            prev = {
+                "_last_x": emulador.state.get("_last_x"),
+                "_last_y": emulador.state.get("_last_y"),
+                "mouse_dx": emulador.state.get("mouse_dx"),
+                "mouse_dy": emulador.state.get("mouse_dy"),
+                "_last_hook_move_ts": emulador.state.get("_last_hook_move_ts"),
+            }
+            emulador.state["_last_x"] = None
+            emulador.state["_last_y"] = None
+            emulador.state["mouse_dx"] = 0.0
+            emulador.state["mouse_dy"] = 0.0
+            emulador.state["_last_hook_move_ts"] = 0.0
+        try:
+            emulador._accumulate_mouse_delta(100, 200)
+            emulador._accumulate_mouse_delta(115, 230, hook_event=True)
+            with emulador.state["lock"]:
+                self.assertEqual(emulador.state["mouse_dx"], 15.0)
+                self.assertEqual(emulador.state["mouse_dy"], 30.0)
+                self.assertEqual(emulador.state["_last_x"], 115)
+                self.assertEqual(emulador.state["_last_y"], 230)
+                self.assertGreater(emulador.state["_last_hook_move_ts"], 0.0)
+        finally:
+            with emulador.state["lock"]:
+                emulador.state.update(prev)
+
+    def test_on_move_fallback_ignores_when_recent_hook_event(self):
+        with emulador.state["lock"]:
+            prev = {
+                "active": emulador.state.get("active"),
+                "gamepad": emulador.state.get("gamepad"),
+                "_use_hook_mouse_move": emulador.state.get("_use_hook_mouse_move"),
+                "_last_hook_move_ts": emulador.state.get("_last_hook_move_ts"),
+                "_last_x": emulador.state.get("_last_x"),
+                "_last_y": emulador.state.get("_last_y"),
+                "mouse_dx": emulador.state.get("mouse_dx"),
+                "mouse_dy": emulador.state.get("mouse_dy"),
+            }
+            emulador.state["active"] = True
+            emulador.state["gamepad"] = object()
+            emulador.state["_use_hook_mouse_move"] = True
+            emulador.state["_last_hook_move_ts"] = emulador.time.monotonic()
+            emulador.state["_last_x"] = 10
+            emulador.state["_last_y"] = 10
+            emulador.state["mouse_dx"] = 0.0
+            emulador.state["mouse_dy"] = 0.0
+        try:
+            emulador._on_move(20, 30)
+            with emulador.state["lock"]:
+                self.assertEqual(emulador.state["mouse_dx"], 0.0)
+                self.assertEqual(emulador.state["mouse_dy"], 0.0)
+            with emulador.state["lock"]:
+                emulador.state["_use_hook_mouse_move"] = False
+            emulador._on_move(20, 30)
+            with emulador.state["lock"]:
+                self.assertEqual(emulador.state["mouse_dx"], 10.0)
+                self.assertEqual(emulador.state["mouse_dy"], 20.0)
+        finally:
+            with emulador.state["lock"]:
+                emulador.state.update(prev)
+
 
 if __name__ == "__main__":
     unittest.main()
