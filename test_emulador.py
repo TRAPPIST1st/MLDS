@@ -165,6 +165,11 @@ class EmuladorTests(unittest.TestCase):
             with emulador.state["lock"]:
                 emulador.state.update(prev)
 
+    def test_mouse_delta_to_stick_does_not_apply_deadzone(self):
+        self.assertAlmostEqual(emulador._mouse_delta_to_stick(1.0, 0.015), 0.015)
+        self.assertAlmostEqual(emulador._mouse_delta_to_stick(-2.0, 0.015), -0.03)
+        self.assertEqual(emulador._mouse_delta_to_stick(999.0, 0.015), 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

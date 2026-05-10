@@ -168,6 +168,9 @@ def apply_dz(v, dz):
     s = 1 if v > 0 else -1
     return s * (abs(v) - dz) / (1.0 - dz)
 
+def _mouse_delta_to_stick(delta, sensitivity):
+    return clamp(delta * sensitivity)
+
 def _normalize_key_name(key_name):
     if key_name is None:
         return ""
@@ -527,12 +530,12 @@ def _update_loop():
                 dx = state["mouse_dx"];  state["mouse_dx"] = 0.0
                 dy = state["mouse_dy"];  state["mouse_dy"] = 0.0
             sm    = cfg["smoothing"]
-            rx_r  = clamp(dx * cfg["sensitivity_x"])
-            ry_r  = clamp(dy * cfg["sensitivity_y"])
+            rx_r  = _mouse_delta_to_stick(dx, cfg["sensitivity_x"])
+            ry_r  = _mouse_delta_to_stick(dy, cfg["sensitivity_y"])
             state["rx_smooth"] = state["rx_smooth"] * sm + rx_r * (1 - sm)
             state["ry_smooth"] = state["ry_smooth"] * sm + ry_r * (1 - sm)
-            rx    = apply_dz(state["rx_smooth"], cfg["deadzone"])
-            ry    = apply_dz(state["ry_smooth"], cfg["deadzone"])
+            rx    = clamp(state["rx_smooth"])
+            ry    = clamp(state["ry_smooth"])
             lx, ly = 0.0, 0.0
             with state["lock"]:
                 pressed_keys = list(state["pressed_keys"])
