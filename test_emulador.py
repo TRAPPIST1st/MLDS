@@ -170,6 +170,11 @@ class EmuladorTests(unittest.TestCase):
         self.assertAlmostEqual(emulador._mouse_delta_to_stick(-2.0, 0.015), -0.03)
         self.assertEqual(emulador._mouse_delta_to_stick(999.0, 0.015), 1.0)
 
+    def test_suppress_stick_noise(self):
+        self.assertEqual(emulador._suppress_stick_noise(0.001), 0.0)
+        self.assertAlmostEqual(emulador._suppress_stick_noise(0.015), 0.015)
+        self.assertEqual(emulador._suppress_stick_noise(2.0), 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

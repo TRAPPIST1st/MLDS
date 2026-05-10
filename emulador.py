@@ -108,6 +108,7 @@ WM_QUIT      = 0x0012
 HOOK_INIT_TIMEOUT_SECONDS = 0.8
 SCROLL_RELEASE_DELAY_SECONDS = 0.12
 HOOK_FALLBACK_IDLE_SECONDS = 0.05
+MOUSE_STICK_NOISE_FLOOR = 0.002
 PM_REMOVE    = 0x0001
 if sys.platform == "win32" and hasattr(ctypes, "WINFUNCTYPE"):
     _HOOK_FUNC_TYPE = ctypes.WINFUNCTYPE
@@ -170,6 +171,14 @@ def apply_dz(v, dz):
 
 def _mouse_delta_to_stick(delta, sensitivity):
     return clamp(delta * sensitivity)
+
+def _suppress_stick_noise(v, floor=MOUSE_STICK_NOISE_FLOOR):
+    return 0.0 if abs(v) < floor else clamp(v)
+
+def _format_key_display(key_name):
+    if not key_name:
+        return "-"
+    return key_name.upper() if len(key_name) == 1 else key_name
 
 def _normalize_key_name(key_name):
     if key_name is None:
@@ -534,8 +543,8 @@ def _update_loop():
             ry_r  = _mouse_delta_to_stick(dy, cfg["sensitivity_y"])
             state["rx_smooth"] = state["rx_smooth"] * sm + rx_r * (1 - sm)
             state["ry_smooth"] = state["ry_smooth"] * sm + ry_r * (1 - sm)
-            rx    = clamp(state["rx_smooth"])
-            ry    = clamp(state["ry_smooth"])
+            rx    = _suppress_stick_noise(state["rx_smooth"])
+            ry    = _suppress_stick_noise(state["ry_smooth"])
             lx, ly = 0.0, 0.0
             with state["lock"]:
                 pressed_keys = list(state["pressed_keys"])
@@ -774,7 +783,7 @@ class App(tk.Tk):
         pad.create_oval(330, 130, 370, 170, outline=C["border"], width=2, fill=C["bg2"])
         for label, (x, y, title) in _PS5_VISUAL_LAYOUT.items():
             key_s = state["config"]["keymap"].get(label, "")
-            key_show = (key_s.upper() if len(key_s) == 1 else key_s) if key_s else "-"
+            key_show = _format_key_display(key_s)
             txt = f"{title}\n[{key_show}]"
             btn = tk.Button(pad, text=txt, font=("Courier", 8, "bold"),
                             fg=C["text"], bg=C["bg3"], activebackground=C["bg3"],
@@ -833,7 +842,7 @@ class App(tk.Tk):
         visual_btn = self._km_visual_btns.get(label)
         if visual_btn is not None and hasattr(visual_btn, "configure"):
             title = self._km_btn_title.get(label, label)
-            key_show = key_name.upper() if len(key_name) == 1 else (key_name or "-")
+            key_show = _format_key_display(key_name)
             visual_btn.configure(text=f"{title}\n[{key_show}]")
 
     def _capture_key(self, event):
@@ -847,7 +856,7 @@ class App(tk.Tk):
         var_r.set(show)
         if isinstance(widget, tk.Button):
             title = self._km_btn_title.get(btn_l, btn_l)
-            key_show = key_name.upper() if len(key_name) == 1 else (key_name or "-")
+            key_show = _format_key_display(key_name)
             widget.configure(fg=C["accent"], text=f"{title}\n[{key_show}]")
         else:
             widget.configure(fg=C["accent"], text=show)
