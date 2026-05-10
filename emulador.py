@@ -111,9 +111,10 @@ HOOK_FALLBACK_IDLE_SECONDS = 0.05
 PM_REMOVE    = 0x0001
 if sys.platform == "win32" and hasattr(ctypes, "WINFUNCTYPE"):
     _HOOK_FUNC_TYPE = ctypes.WINFUNCTYPE
+    HOOKPROC = _HOOK_FUNC_TYPE(ctypes.c_long, ctypes.c_int, wt.WPARAM, wt.LPARAM)
 else:
-    _HOOK_FUNC_TYPE = ctypes.CFUNCTYPE
-HOOKPROC = _HOOK_FUNC_TYPE(ctypes.c_long, ctypes.c_int, wt.WPARAM, wt.LPARAM)
+    _HOOK_FUNC_TYPE = None
+    HOOKPROC = None
 
 _NUMPAD_TK_KEYS = {
     "kp_0": "num_0", "kp_insert": "num_0",
@@ -325,6 +326,8 @@ def build_reverse_keymap():
     return result
 
 def _install_mouse_hook():
+    if sys.platform != "win32" or HOOKPROC is None:
+        return False
     def _proc(nCode, wParam, lParam):
         if nCode >= 0 and wParam == WM_MOUSEMOVE:
             try:
@@ -781,12 +784,11 @@ class App(tk.Tk):
             btn.configure(command=lambda l=label, w=btn, v=var: self._start_key_capture(w, v, l))
         hdr = tk.Frame(self._km_inner, bg=C["bg3"])
         hdr.pack(fill="x", pady=(0, 2))
-        for txt, w in [("Boton del Control", 24), ("Tecla Asignada", 20), ("", 6)]:
+        for txt, w in [("Botón del Control", 24), ("Tecla Asignada", 20), ("", 6)]:
             tk.Label(hdr, text=txt, font=("Courier", 9, "bold"),
                      fg=C["dim"], bg=C["bg3"], width=w, anchor="w",
                      padx=10, pady=6).pack(side="left")
 
-        self._km_widgets = {}
         for label, key_s in state["config"]["keymap"].items():
             row = tk.Frame(self._km_inner, bg=C["bg2"], pady=1)
             row.pack(fill="x", pady=1)
