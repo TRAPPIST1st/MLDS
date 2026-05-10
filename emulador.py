@@ -103,7 +103,8 @@ class _MSLLHOOKSTRUCT(ctypes.Structure):
 WH_MOUSE_LL  = 14
 WM_MOUSEMOVE = 0x0200
 WM_QUIT      = 0x0012
-if hasattr(ctypes, "WINFUNCTYPE"):
+PM_REMOVE    = 0x0001
+if sys.platform == "win32" and hasattr(ctypes, "WINFUNCTYPE"):
     _HOOK_FUNC = ctypes.WINFUNCTYPE
 else:
     _HOOK_FUNC = ctypes.CFUNCTYPE
@@ -343,13 +344,16 @@ def _install_mouse_hook():
                 return
             msg = wt.MSG()
             while state["running"]:
-                ret = ctypes.windll.user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
-                if ret == -1:
-                    break
-                if ret == 0:
-                    break
-                ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
-                ctypes.windll.user32.DispatchMessageW(ctypes.byref(msg))
+                has_msg = ctypes.windll.user32.PeekMessageW(
+                    ctypes.byref(msg), None, 0, 0, PM_REMOVE
+                )
+                if has_msg:
+                    if msg.message == WM_QUIT:
+                        break
+                    ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
+                    ctypes.windll.user32.DispatchMessageW(ctypes.byref(msg))
+                else:
+                    time.sleep(0.001)
         except Exception:
             with state["lock"]:
                 state["_hook"] = None
@@ -385,8 +389,6 @@ def _on_click(x, y, button, pressed):
             return
         g = state["gamepad"]
         mm = dict(state["config"]["mouse_map"])
-    if not g:
-        return
     if button == pmouse.Button.left:
         btn = mm.get("Click Izquierdo", "RT")
     elif button == pmouse.Button.right:
@@ -403,8 +405,6 @@ def _on_scroll(x, y, dx, dy):
             return
         g = state["gamepad"]
         mm = dict(state["config"]["mouse_map"])
-    if not g:
-        return
     key = "Scroll Arriba" if dy > 0 else "Scroll Abajo"
     btn = mm.get(key, "DPAD_UP" if dy > 0 else "DPAD_DOWN")
     fn  = BUTTON_MAP.get(btn)

@@ -5,11 +5,11 @@ import types
 if "tkinter" not in sys.modules:
     tk_stub = types.ModuleType("tkinter")
 
-    class _Dummy:
+    class _TkStub:
         def __init__(self, *args, **kwargs):
             pass
 
-    class _Var(_Dummy):
+    class _Var(_TkStub):
         def __init__(self, value=None):
             self._value = value
 
@@ -19,18 +19,18 @@ if "tkinter" not in sys.modules:
         def get(self):
             return self._value
 
-    tk_stub.Tk = _Dummy
-    tk_stub.Frame = _Dummy
-    tk_stub.Label = _Dummy
-    tk_stub.Button = _Dummy
-    tk_stub.Canvas = _Dummy
+    tk_stub.Tk = _TkStub
+    tk_stub.Frame = _TkStub
+    tk_stub.Label = _TkStub
+    tk_stub.Button = _TkStub
+    tk_stub.Canvas = _TkStub
     tk_stub.StringVar = _Var
     tk_stub.DoubleVar = _Var
-    tk_stub.Event = _Dummy
+    tk_stub.Event = _TkStub
     ttk_stub = types.ModuleType("tkinter.ttk")
-    ttk_stub.Scrollbar = _Dummy
-    ttk_stub.Combobox = _Dummy
-    ttk_stub.Scale = _Dummy
+    ttk_stub.Scrollbar = _TkStub
+    ttk_stub.Combobox = _TkStub
+    ttk_stub.Scale = _TkStub
     messagebox_stub = types.ModuleType("tkinter.messagebox")
     messagebox_stub.showerror = lambda *args, **kwargs: None
     tk_stub.ttk = ttk_stub
