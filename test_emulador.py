@@ -61,7 +61,7 @@ class _FakeKeyboard:
 class EmuladorTests(unittest.TestCase):
     def test_normalize_key_name_maps_tk_numpad(self):
         self.assertEqual(emulador._normalize_key_name("KP_1"), "num_1")
-        self.assertEqual(emulador._normalize_key_name("KP_End"), "num_1")
+        self.assertEqual(emulador._normalize_key_name("kp_end"), "num_1")
         self.assertEqual(emulador._normalize_key_name("Control_L"), "ctrl_l")
 
     def test_build_validated_config_clamps_numeric_and_filters_values(self):

@@ -103,7 +103,10 @@ class _MSLLHOOKSTRUCT(ctypes.Structure):
 WH_MOUSE_LL  = 14
 WM_MOUSEMOVE = 0x0200
 WM_QUIT      = 0x0012
-_HOOK_FUNC = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)
+if hasattr(ctypes, "WINFUNCTYPE"):
+    _HOOK_FUNC = ctypes.WINFUNCTYPE
+else:
+    _HOOK_FUNC = ctypes.CFUNCTYPE
 HOOKPROC = _HOOK_FUNC(ctypes.c_long, ctypes.c_int, wt.WPARAM, wt.LPARAM)
 
 _NUMPAD_TK_KEYS = {
@@ -136,7 +139,7 @@ _SPECIAL_KEY_ATTRS = {
     "backspace": "backspace", "caps_lock": "caps_lock",
     "num_lock": "num_lock", "scroll_lock": "scroll_lock", "pause": "pause",
 }
-for _i in range(1, 25):
+for _i in range(1, 13):
     _SPECIAL_KEY_ATTRS[f"f{_i}"] = f"f{_i}"
 
 _NUMERIC_CONFIG_BOUNDS = {
@@ -341,7 +344,9 @@ def _install_mouse_hook():
             msg = wt.MSG()
             while state["running"]:
                 ret = ctypes.windll.user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
-                if ret <= 0:
+                if ret == -1:
+                    break
+                if ret == 0:
                     break
                 ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
                 ctypes.windll.user32.DispatchMessageW(ctypes.byref(msg))
@@ -417,6 +422,7 @@ def _char(key):
 def _lookup_key(key):
     try:
         vk = getattr(key, "vk", None)
+        # 0x60-0x69 = VK_NUMPAD0..VK_NUMPAD9
         if DEPS_OK and isinstance(vk, int) and 0x60 <= vk <= 0x69:
             return pkeyboard.KeyCode.from_vk(vk)
     except Exception:
